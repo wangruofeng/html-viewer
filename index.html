@@ -179,6 +179,41 @@
     font-size: 13px; line-height: 1.85; overflow-x: auto;
   }
 
+  /* ---------- 视图布局：结构 / 渲染 / 对比 ---------- */
+  .workspace { display: flex; gap: 16px; align-items: flex-start; max-width: 1400px; margin: 0 auto; }
+  main.view-tree .preview-panel { display: none; }
+  main.view-preview .tree-panel { display: none; }
+  main.view-tree .tree-panel,
+  main.view-preview .preview-panel { flex: 1 1 auto; max-width: 1200px; margin: 0 auto; }
+  main.view-split .tree-panel,
+  main.view-split .preview-panel { flex: 1 1 0; min-width: 0; margin: 0; }
+
+  /* ---------- 渲染预览面板 ---------- */
+  /* 用沙箱 iframe 渲染用户 HTML 的真实外观：CSS 生效，但脚本被禁用不执行 */
+  .preview-panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+    overflow: hidden; display: flex; flex-direction: column;
+  }
+  .preview-head {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 10px 14px; border-bottom: 1px solid var(--border);
+    background: var(--bg); font-size: 12px; color: var(--text-muted);
+  }
+  .preview-head .preview-title { font-weight: 600; color: var(--text); }
+  .preview-head .preview-tag {
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 0 8px; line-height: 17px; font-size: 11px;
+  }
+  .preview-body { position: relative; background: #fff; height: 72vh; min-height: 380px; }
+  .preview-body iframe { width: 100%; height: 100%; border: 0; display: block; background: #fff; }
+
+  @media (max-width: 900px) {
+    main.view-split .workspace { flex-direction: column; }
+    main.view-split .tree-panel,
+    main.view-split .preview-panel { width: 100%; }
+  }
+
   /* ---------- Tree nodes ---------- */
   .node { position: relative; }
   .row {
@@ -314,6 +349,7 @@
     main { padding: 12px 12px 50px; }
     .logo .sub { display: none; }
     .btn { height: 32px; padding: 0 10px; font-size: 12.5px; }
+    .preview-body { height: 60vh; }
     :root { --indent: 16px; }
   }
 </style>
@@ -359,6 +395,12 @@
     <button data-level="2">2 层</button>
     <button data-level="3">3 层</button>
     <button data-level="none">折叠</button>
+  </div>
+
+  <div class="seg" id="viewSeg" title="切换视图：结构树 / 渲染效果 / 左右对比">
+    <button data-view="tree" class="active">结构</button>
+    <button data-view="preview">渲染</button>
+    <button data-view="split">对比</button>
   </div>
 
   <div class="divider"></div>
@@ -462,7 +504,7 @@
    ========================================================= */
 
 const $ = (s) => document.querySelector(s);
-const state = { doc: null, fileName: null, rawText: '', elementCount: 0, depth: 0, compact: true };
+const state = { doc: null, fileName: null, rawText: '', elementCount: 0, depth: 0, compact: true, view: 'tree' };
 
 /* ---------- 通用工具 ---------- */
 function escapeHtml(s) {
@@ -508,6 +550,7 @@ async function copyAndToast(text, msg) {
 
 const COPY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
 const CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
+const REFRESH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>';
 
 /* HTML void 元素清单：这些元素没有闭合标签 */
 const VOID_ELEMENTS = new Set(['area','base','br','col','embed','hr','img','input','link','meta','param','source','track','wbr']);
@@ -929,7 +972,7 @@ function loadHtml(text, fileName) {
   state.depth = 0;
   countElements(doc.documentElement, 0);
 
-  renderTree();
+  renderDoc();
   applyCompact(state.compact);
   applyLevel(2);            // 默认展开到第 2 层
   updateStats(true);
@@ -939,10 +982,22 @@ function loadHtml(text, fileName) {
   return true;
 }
 
-function renderTree() {
+function renderDoc() {
   const main = $('#main');
   main.innerHTML = '';
+  main.classList.remove('view-tree', 'view-preview', 'view-split');
+  main.classList.add('view-' + state.view);
 
+  const workspace = document.createElement('div');
+  workspace.className = 'workspace';
+  workspace.appendChild(buildTreePanel());
+  workspace.appendChild(buildPreviewPanel());
+  main.appendChild(workspace);
+
+  updatePreviewFrame();
+}
+
+function buildTreePanel() {
   const panel = document.createElement('div');
   panel.className = 'tree-panel';
 
@@ -973,7 +1028,51 @@ function renderTree() {
   body.appendChild(renderElement(root));
 
   panel.appendChild(body);
-  main.appendChild(panel);
+  return panel;
+}
+
+/* 渲染预览面板：用沙箱 iframe 渲染用户 HTML 的真实外观。
+   sandbox 不带任何 allow-* token：脚本不执行、表单不提交、不能访问父页面，
+   完全符合「仅解析，不执行」红线；CSS 仍正常生效以还原视觉。 */
+function buildPreviewPanel() {
+  const panel = document.createElement('div');
+  panel.className = 'preview-panel';
+
+  const head = document.createElement('div');
+  head.className = 'preview-head';
+  head.innerHTML =
+    '<span>👁</span>' +
+    '<span class="preview-title">渲染预览</span>' +
+    '<span>·</span>' +
+    '<span class="preview-tag">沙箱隔离 · 脚本已禁用</span>';
+  const spacer = document.createElement('span');
+  spacer.className = 'spacer';
+  head.appendChild(spacer);
+  const refresh = document.createElement('button');
+  refresh.className = 'btn ghost';
+  refresh.innerHTML = REFRESH_ICON + '<span>刷新</span>';
+  refresh.title = '重新渲染预览';
+  refresh.addEventListener('click', () => updatePreviewFrame());
+  head.appendChild(refresh);
+  panel.appendChild(head);
+
+  const body = document.createElement('div');
+  body.className = 'preview-body';
+  const frame = document.createElement('iframe');
+  frame.id = 'previewFrame';
+  frame.title = 'HTML 渲染预览（沙箱，脚本已禁用）';
+  frame.setAttribute('sandbox', '');
+  frame.referrerPolicy = 'no-referrer';
+  body.appendChild(frame);
+  panel.appendChild(body);
+  return panel;
+}
+
+/* 写入用户 HTML 到沙箱 iframe；iframe 已连入 DOM 后再设 srcdoc，
+   确保 sandbox 约束在加载时即生效。 */
+function updatePreviewFrame() {
+  const frame = $('#previewFrame');
+  if (frame) frame.srcdoc = state.rawText;
 }
 
 function updateStats(ok) {
@@ -988,7 +1087,9 @@ function showEmpty(title, msg) {
   $('#copyAllBtn').disabled = true;
   $('#downloadBtn').disabled = true;
   $('#statBar').classList.add('hidden');
-  $('#main').innerHTML =
+  const main = $('#main');
+  main.classList.remove('view-tree', 'view-preview', 'view-split');
+  main.innerHTML =
     '<div class="empty-box">' +
       '<div class="big-icon">' +
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>' +
@@ -1043,6 +1144,19 @@ function applyCompact(compact) {
   const btn = $('#compactBtn');
   btn.classList.toggle('active', compact);
   btn.title = compact ? '精简模式已开启：隐藏 style 属性值与 script/style 内容' : '精简模式已关闭：显示完整 style 属性值与 script/style 内容';
+}
+
+/* ---------- 视图模式：结构 / 渲染 / 对比 ---------- */
+function applyView(view) {
+  state.view = view;
+  const main = $('#main');
+  if (main) {
+    main.classList.remove('view-tree', 'view-preview', 'view-split');
+    main.classList.add('view-' + view);
+  }
+  document.querySelectorAll('#viewSeg button').forEach(b => {
+    b.classList.toggle('active', b.dataset.view === view);
+  });
 }
 
 /* ---------- 事件绑定 ---------- */
@@ -1185,6 +1299,13 @@ document.querySelectorAll('#levelSeg button').forEach(b => {
     if (lvl === 'all') applyLevel('all');
     else if (lvl === 'none') applyLevel('none');
     else applyLevel(parseInt(lvl, 10));
+  });
+});
+
+document.querySelectorAll('#viewSeg button').forEach(b => {
+  b.addEventListener('click', () => {
+    if (!state.doc) { showToast('请先导入 HTML', false); return; }
+    applyView(b.dataset.view);
   });
 });
 
