@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HTML 结构预览工具</title>
+<title>HTML 结构预览编辑工具</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="alternate icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop stop-color='%232563eb'/><stop offset='1' stop-color='%237c3aed'/></linearGradient></defs><rect width='32' height='32' rx='7' fill='url(%23g)'/><text x='16' y='16' text-anchor='middle' dominant-baseline='central' font-family='-apple-system,Segoe UI,Arial,sans-serif' font-size='14' font-weight='700' fill='%23ffffff'>&lt;&gt;</text></svg>">
 <style>
@@ -221,7 +221,8 @@
     border-radius: 5px; position: relative;
   }
   .row:hover { background: var(--bg); }
-  .row.has-toggle { cursor: pointer; }
+  .row.selected { background: var(--accent-soft); outline: 1px solid var(--accent); }
+  .row.has-toggle, .row.source-editable { cursor: pointer; }
 
   .children { padding-left: var(--indent); border-left: 1px solid var(--guide); margin-left: 6px; }
   /* 折叠状态：隐藏子节点 */
@@ -360,7 +361,7 @@
   <div class="logo">
     <div class="mark">&lt;&gt;</div>
     <div>
-      HTML 结构预览工具
+      HTML 结构预览编辑工具
       <div class="sub">导入 · DOM 树形视图 · 折叠展开 · 复制下载</div>
     </div>
   </div>
@@ -429,6 +430,8 @@
     <span>·</span>
     <span id="statNodes">0 元素</span>
     <span>·</span>
+    <span id="statLines">0 行</span>
+    <span>·</span>
     <span id="statDepth">最大深度 0 层</span>
   </div>
 </div>
@@ -471,6 +474,25 @@
   </div>
 </div>
 
+<!-- Element source modal -->
+<div class="modal-backdrop" id="elementEditModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="elementEditTitle">编辑元素源码</h3>
+      <button class="icon-btn" id="elementEditCloseBtn" aria-label="关闭编辑">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <textarea id="elementEditArea" spellcheck="false"></textarea>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="elementEditCancelBtn">取消</button>
+      <button class="btn primary" id="elementEditSaveBtn">保存</button>
+    </div>
+  </div>
+</div>
+
 <!-- URL modal -->
 <div class="modal-backdrop" id="urlModal">
   <div class="modal">
@@ -495,7 +517,7 @@
 
 <script>
 /* =========================================================
-   HTML 结构预览工具
+   HTML 结构预览编辑工具
    - 导入文件 / 粘贴文本 / URL 导入
    - 结构化（DOMParser text/html 容错解析）
    - DOM 树形视图，按层级展开/折叠
@@ -504,7 +526,7 @@
    ========================================================= */
 
 const $ = (s) => document.querySelector(s);
-const state = { doc: null, fileName: null, rawText: '', elementCount: 0, depth: 0, compact: true, view: 'tree' };
+const state = { doc: null, fileName: null, rawText: '', elementCount: 0, depth: 0, compact: true, view: 'tree', selectedElement: null };
 
 /* ---------- 通用工具 ---------- */
 function escapeHtml(s) {
@@ -518,6 +540,7 @@ function formatSize(bytes) {
   return (bytes / 1048576).toFixed(2) + ' MB';
 }
 function byteLength(str) { try { return new Blob([str]).size; } catch { return str.length; } }
+function lineCount(str) { return str ? str.split(/\r\n|\r|\n/).length : 0; }
 function truncateStr(s, n) { return s.length <= n ? s : s.slice(0, n) + '…'; }
 
 let toastTimer;
@@ -700,6 +723,23 @@ function renderAttribute(row, attr) {
 }
 
 /* ---------- 树形渲染 ---------- */
+function enableElementSourceEditing(row, node, el, canToggle) {
+  row.classList.add('source-editable');
+  row.addEventListener('click', (e) => {
+    if (e.target.closest('.copy-btn') || e.target.closest('.tag')
+        || e.target.closest('.attr-name') || e.target.closest('.attr-val')) return;
+    selectTreeElement(row, el);
+    if (canToggle) node.classList.toggle('open');
+  });
+  row.addEventListener('dblclick', (e) => {
+    if (e.target.closest('.copy-btn') || e.target.closest('.tag')
+        || e.target.closest('.attr-name') || e.target.closest('.attr-val')) return;
+    e.preventDefault();
+    selectTreeElement(row, el);
+    openElementEditModal(el);
+  });
+}
+
 function renderElement(el) {
   const tagName = el.tagName.toLowerCase();
   const node = document.createElement('div');
@@ -707,6 +747,7 @@ function renderElement(el) {
 
   const row = document.createElement('div');
   row.className = 'row';
+  row.title = '单击选中元素，双击编辑元素源码';
   node.appendChild(row);
 
   const children = meaningfulChildren(el);
@@ -715,6 +756,7 @@ function renderElement(el) {
   // 仅含纯文本的元素按叶子单行展示；script/style 按特殊单行处理
   const hasElementKids = children.some(n => n.nodeType === Node.ELEMENT_NODE || n.nodeType === Node.COMMENT_NODE);
   const isLeafText = hasChildren && !hasElementKids && tagName !== 'script' && tagName !== 'style';
+  enableElementSourceEditing(row, node, el, hasChildren && !isLeafText);
 
   const toggle = document.createElement('span');
   toggle.className = 'toggle' + (!hasChildren || isLeafText ? ' empty' : '');
@@ -851,14 +893,6 @@ function renderElement(el) {
   childrenEl.appendChild(closeRow);
 
   node.appendChild(childrenEl);
-
-  // 点击行切换展开/折叠
-  row.classList.add('has-toggle');
-  row.addEventListener('click', (e) => {
-    if (e.target.closest('.copy-btn') || e.target.closest('.tag')
-        || e.target.closest('.attr-name') || e.target.closest('.attr-val')) return;
-    node.classList.toggle('open');
-  });
 
   return node;
 }
@@ -1012,7 +1046,12 @@ function buildTreePanel() {
     '<span>·</span>' +
     '<span>' + state.elementCount + ' 元素</span>' +
     '<span>·</span>' +
-    '<span>最大深度 ' + state.depth + ' 层</span>';
+    '<span>' + lineCount(state.rawText) + ' 行</span>' +
+    '<span>·</span>' +
+    '<span>最大深度 ' + state.depth + ' 层</span>' +
+    '<span>·</span>' +
+    '<span>双击元素编辑源码</span>';
+  head.title = '单击元素行选中，双击编辑该元素的源码';
   panel.appendChild(head);
 
   const body = document.createElement('div');
@@ -1044,7 +1083,7 @@ function buildPreviewPanel() {
     '<span>👁</span>' +
     '<span class="preview-title">渲染预览</span>' +
     '<span>·</span>' +
-    '<span class="preview-tag">沙箱隔离 · 脚本已禁用</span>';
+    '<span class="preview-tag">点击文字编辑 · 源码自动同步</span>';
   const spacer = document.createElement('span');
   spacer.className = 'spacer';
   head.appendChild(spacer);
@@ -1060,24 +1099,118 @@ function buildPreviewPanel() {
   body.className = 'preview-body';
   const frame = document.createElement('iframe');
   frame.id = 'previewFrame';
-  frame.title = 'HTML 渲染预览（沙箱，脚本已禁用）';
-  frame.setAttribute('sandbox', '');
+  frame.title = 'HTML 渲染预览（点击文字即可编辑）';
+  // 保留脚本禁用，仅允许父页面读取预览 DOM 以同步用户编辑的文本。
+  frame.setAttribute('sandbox', 'allow-same-origin');
   frame.referrerPolicy = 'no-referrer';
+  frame.addEventListener('load', () => bindPreviewTextEditing(frame));
   body.appendChild(frame);
   panel.appendChild(body);
   return panel;
 }
 
 /* 写入用户 HTML 到沙箱 iframe；iframe 已连入 DOM 后再设 srcdoc，
-   确保 sandbox 约束在加载时即生效。 */
+   确保脚本始终在沙箱约束下禁用。 */
 function updatePreviewFrame() {
   const frame = $('#previewFrame');
   if (frame) frame.srcdoc = state.rawText;
 }
 
+/* ---------- 渲染预览中的文本编辑 ---------- */
+const previewEditableElements = new WeakSet();
+
+function previewTextElement(target) {
+  let el = target.nodeType === Node.ELEMENT_NODE ? target : target.parentElement;
+  while (el && el.nodeType === Node.ELEMENT_NODE) {
+    const tag = el.tagName.toLowerCase();
+    const hasText = Array.from(el.childNodes).some(n => n.nodeType === Node.TEXT_NODE && n.nodeValue.trim());
+    if (hasText && el.children.length === 0 && tag !== 'script' && tag !== 'style') return el;
+    el = el.parentElement;
+  }
+  return null;
+}
+
+function elementPath(el) {
+  const path = [];
+  let current = el;
+  while (current && current.parentElement) {
+    path.unshift(Array.from(current.parentElement.children).indexOf(current));
+    current = current.parentElement;
+  }
+  return path;
+}
+
+function elementFromPath(root, path) {
+  return path.reduce((node, index) => node && node.children[index], root);
+}
+
+function serializeDocument(doc) {
+  return Array.from(doc.childNodes).map(serializeNode).join('\n');
+}
+
+function selectTreeElement(row, el) {
+  document.querySelectorAll('.tree-panel .row.selected').forEach(item => item.classList.remove('selected'));
+  row.classList.add('selected');
+  state.selectedElement = el;
+}
+
+function syncPreviewText(el) {
+  const sourceEl = elementFromPath(state.doc.documentElement, elementPath(el));
+  if (!sourceEl) return;
+  sourceEl.textContent = el.textContent;
+  state.rawText = serializeDocument(state.doc);
+  updateStats(true);
+}
+
+function refreshTreeAfterPreviewEdit() {
+  const currentTree = document.querySelector('.tree-panel');
+  if (!currentTree || !state.doc) return;
+  const activeLevel = document.querySelector('#levelSeg button.active')?.dataset.level || '2';
+  currentTree.replaceWith(buildTreePanel());
+  applyCompact(state.compact);
+  if (activeLevel === 'all' || activeLevel === 'none') applyLevel(activeLevel);
+  else applyLevel(parseInt(activeLevel, 10));
+}
+
+function enablePreviewTextEditing(el) {
+  if (!el.isContentEditable) {
+    el.contentEditable = 'true';
+    el.dataset.previewTextEditing = 'true';
+  }
+  if (previewEditableElements.has(el)) return;
+
+  previewEditableElements.add(el);
+  el.addEventListener('input', () => syncPreviewText(el));
+  el.addEventListener('paste', (event) => {
+    event.preventDefault();
+    const text = event.clipboardData.getData('text/plain');
+    el.ownerDocument.execCommand('insertText', false, text);
+  });
+  el.addEventListener('blur', () => {
+    if (el.dataset.previewTextEditing) {
+      el.removeAttribute('contenteditable');
+      delete el.dataset.previewTextEditing;
+    }
+    refreshTreeAfterPreviewEdit();
+  });
+}
+
+function bindPreviewTextEditing(frame) {
+  const previewDoc = frame.contentDocument;
+  if (!previewDoc || !state.doc) return;
+  previewDoc.addEventListener('mousedown', (event) => {
+    const el = previewTextElement(event.target);
+    if (el) enablePreviewTextEditing(el);
+  }, true);
+  previewDoc.addEventListener('click', (event) => {
+    if (event.target.closest('[data-preview-text-editing]')) event.preventDefault();
+  }, true);
+}
+
 function updateStats(ok) {
   $('#statSize').textContent = formatSize(byteLength(state.rawText));
   $('#statNodes').textContent = state.elementCount + ' 元素';
+  $('#statLines').textContent = lineCount(state.rawText) + ' 行';
   $('#statDepth').textContent = '最大深度 ' + state.depth + ' 层';
   const dot = $('#statBar .dot');
   dot.classList.toggle('ok', !!ok);
@@ -1188,6 +1321,63 @@ $('#pasteCancelBtn').addEventListener('click', closePasteModal);
 $('#pasteLoadBtn').addEventListener('click', () => {
   if (loadHtml($('#pasteArea').value, '粘贴的 HTML')) closePasteModal();
 });
+
+/* ---------- 元素源码编辑 ---------- */
+function openElementEditModal(el) {
+  state.selectedElement = el;
+  $('#elementEditTitle').textContent = '编辑 <' + el.tagName.toLowerCase() + '> 元素源码';
+  $('#elementEditArea').value = el.outerHTML;
+  $('#elementEditModal').classList.add('show');
+  setTimeout(() => $('#elementEditArea').focus(), 50);
+}
+function closeElementEditModal() { $('#elementEditModal').classList.remove('show'); }
+function refreshAfterElementEdit() {
+  state.rawText = serializeDocument(state.doc);
+  state.elementCount = 0;
+  state.depth = 0;
+  countElements(state.doc.documentElement, 0);
+  const activeLevel = document.querySelector('#levelSeg button.active')?.dataset.level || '2';
+  renderDoc();
+  applyCompact(state.compact);
+  if (activeLevel === 'all' || activeLevel === 'none') applyLevel(activeLevel);
+  else applyLevel(parseInt(activeLevel, 10));
+  updateStats(true);
+}
+function saveElementSource() {
+  const current = state.selectedElement;
+  const source = $('#elementEditArea').value.trim();
+  if (!current || !source) { showToast('元素源码不能为空', false); return; }
+
+  if (current === state.doc.documentElement) {
+    if (!/^<html(?:\s|>)/i.test(source)) {
+      showToast('根元素必须是完整的 <html> 元素', false);
+      return;
+    }
+    state.doc = parseHtml(source);
+    closeElementEditModal();
+    refreshAfterElementEdit();
+    showToast('元素源码已更新');
+    return;
+  }
+
+  const range = state.doc.createRange();
+  range.selectNode(current);
+  const nodes = Array.from(range.createContextualFragment(source).childNodes).filter(n =>
+    n.nodeType === Node.ELEMENT_NODE || (n.nodeType === Node.TEXT_NODE && n.nodeValue.trim())
+  );
+  if (nodes.length !== 1 || nodes[0].nodeType !== Node.ELEMENT_NODE) {
+    showToast('请输入一个完整的 HTML 元素', false);
+    return;
+  }
+
+  current.replaceWith(nodes[0]);
+  closeElementEditModal();
+  refreshAfterElementEdit();
+  showToast('元素源码已更新');
+}
+$('#elementEditCloseBtn').addEventListener('click', closeElementEditModal);
+$('#elementEditCancelBtn').addEventListener('click', closeElementEditModal);
+$('#elementEditSaveBtn').addEventListener('click', saveElementSource);
 
 /* ---------- URL 导入 ---------- */
 $('#urlBtn').addEventListener('click', () => openUrlModal());
@@ -1555,11 +1745,14 @@ mainEl.addEventListener('drop', (e) => {
 $('#pasteModal').addEventListener('click', (e) => {
   if (e.target.id === 'pasteModal') closePasteModal();
 });
+$('#elementEditModal').addEventListener('click', (e) => {
+  if (e.target.id === 'elementEditModal') closeElementEditModal();
+});
 $('#urlModal').addEventListener('click', (e) => {
   if (e.target.id === 'urlModal') closeUrlModal();
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { closePasteModal(); closeUrlModal(); }
+  if (e.key === 'Escape') { closePasteModal(); closeElementEditModal(); closeUrlModal(); }
 });
 
 /* 主题切换 */

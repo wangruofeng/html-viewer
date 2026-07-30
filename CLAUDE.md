@@ -1,6 +1,6 @@
 # html-viewer — 项目约定（给 AI 协作时参考）
 
-纯前端、单文件的 HTML 结构预览工具。面向人类的说明见 `README.md`；本文件记录**改代码时必须知道的红线与约定**。项目与同级目录 `../xml-viewer`、`../json-viewer` 保持同一套设计与代码风格。
+纯前端、单文件的 HTML 结构预览编辑工具。面向人类的说明见 `README.md`；本文件记录**改代码时必须知道的红线与约定**。项目与同级目录 `../xml-viewer`、`../json-viewer` 保持同一套设计与代码风格。
 
 ## 红线（不要破坏）
 
@@ -9,6 +9,7 @@
 - **仅解析，不执行（XSS 红线）**：
   - 渲染树一律使用 `createElement` / `textContent` 构建，**禁止**把用户输入直接塞进 `innerHTML`；
   - `script` / `style` 标签的内容仅作为文本展示，**禁止**执行或插入到页面 DOM 中运行。
+  - 渲染 iframe 可使用 `allow-same-origin` 让父页面同步预览中的文本编辑，但不得加入 `allow-scripts` 或其他 `allow-*` 权限。
 - 主题用根元素 `html.dark` 类切换，配色全部走 `:root` / `html.dark` 里的 CSS 变量。新增颜色请复用已有变量，不要硬编码。
 
 ## 文件结构
