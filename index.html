@@ -1238,58 +1238,249 @@ $('#urlInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); loadFromUrl($('#urlInput').value); }
 });
 
-$('#sampleBtn').addEventListener('click', () => {
-  const sample = `<!DOCTYPE html>
+const SAMPLES = [
+  { name: 'sample-hero.html', html: `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>示例页面</title>
-  <link rel="stylesheet" href="/style.css">
+  <title>Nebula · 产品官网</title>
   <style>
-    body { font-family: system-ui, sans-serif; margin: 0; line-height: 1.6; }
-    header { background: #f0f0f0; padding: 1rem; }
-    .highlight { color: #2563eb; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 2rem; min-height: 100vh; font-family: system-ui, -apple-system, sans-serif;
+           background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%); color: #e2e8f0;
+           display: flex; align-items: center; justify-content: center; }
+    .hero { max-width: 640px; text-align: center; }
+    .badge { display: inline-block; padding: 4px 14px; border-radius: 999px; font-size: 13px;
+             background: rgba(129,140,248,.15); border: 1px solid rgba(129,140,248,.4); color: #a5b4fc; }
+    h1 { font-size: 44px; margin: 20px 0 12px; line-height: 1.2;
+         background: linear-gradient(90deg, #818cf8, #c084fc, #f472b6);
+         -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .sub { color: #94a3b8; font-size: 17px; margin-bottom: 28px; }
+    .actions { display: flex; gap: 12px; justify-content: center; }
+    .btn { padding: 12px 28px; border-radius: 10px; font-size: 15px; text-decoration: none; border: none; cursor: pointer; }
+    .btn-primary { background: linear-gradient(90deg, #6366f1, #8b5cf6); color: #fff; box-shadow: 0 8px 24px rgba(99,102,241,.4); }
+    .btn-ghost { background: transparent; color: #c7d2fe; border: 1px solid rgba(199,210,254,.3); }
   </style>
 </head>
 <body>
-  <!-- 页面头部 -->
-  <header id="top-header" class="site-header">
-    <h1 class="logo">HTML 结构预览工具</h1>
-    <nav class="main-nav">
-      <a href="#home">首页</a>
-      <a href="#features">功能</a>
-      <a href="#about">关于</a>
-    </nav>
-  </header>
-
-  <main id="content" class="container">
-    <article class="post">
-      <h2>欢迎使用</h2>
-      <p class="intro">这是一个纯前端的 HTML 结构预览工具。</p>
-      <p>支持导入、粘贴、URL 导入，以及按层级展开折叠。</p>
-    </article>
-    <aside class="sidebar">
-      <div class="widget">侧边栏内容</div>
-    </aside>
+  <main class="hero">
+    <span class="badge">v2.0 现已发布</span>
+    <h1>把复杂留给代码<br>把简单留给用户</h1>
+    <p class="sub">Nebula 是下一代前端工具链，零配置、秒级启动，让创意即刻上线。</p>
+    <div class="actions">
+      <a class="btn btn-primary" href="#start">免费开始</a>
+      <a class="btn btn-ghost" href="#docs">查看文档</a>
+    </div>
   </main>
-
-  <footer class="site-footer">
-    <p>&copy; 2026 示例页面</p>
-  </footer>
-
-  \u003cscript\u003e
-    // 这是一个内联脚本示例，仅作为文本展示，不会被执行
-    console.log("Hello, HTML Viewer!");
-    document.addEventListener("DOMContentLoaded", function() {
-      var header = document.getElementById("top-header");
-      if (header) header.classList.add("loaded");
-    });
-  \u003c/script\u003e
 </body>
-</html>`;
-  loadHtml(sample, 'sample.html');
-  showToast('已加载示例数据');
+</html>` },
+  { name: 'sample-pricing.html', html: `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>定价方案</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 3rem 2rem; font-family: system-ui, sans-serif; background: #f8fafc; color: #0f172a; }
+    h1 { text-align: center; font-size: 30px; margin-bottom: 6px; }
+    .tip { text-align: center; color: #64748b; margin-bottom: 36px; }
+    .plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; max-width: 860px; margin: 0 auto; }
+    .plan { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 28px; transition: transform .2s; }
+    .plan:hover { transform: translateY(-4px); }
+    .plan.hot { border: 2px solid #6366f1; position: relative; box-shadow: 0 12px 32px rgba(99,102,241,.15); }
+    .tag-hot { position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+               background: #6366f1; color: #fff; font-size: 12px; padding: 3px 12px; border-radius: 999px; }
+    .price { font-size: 36px; font-weight: 700; margin: 12px 0; }
+    .price small { font-size: 14px; color: #94a3b8; font-weight: 400; }
+    ul { list-style: none; padding: 0; margin: 18px 0; color: #475569; font-size: 14px; line-height: 2; }
+    li::before { content: "✓"; color: #6366f1; font-weight: 700; margin-right: 8px; }
+    .cta { display: block; width: 100%; padding: 11px; border-radius: 10px; border: 1px solid #c7d2fe;
+           background: #fff; color: #4f46e5; font-size: 15px; cursor: pointer; }
+    .plan.hot .cta { background: #6366f1; color: #fff; border: none; }
+  </style>
+</head>
+<body>
+  <h1>简单透明的定价</h1>
+  <p class="tip">随时升级或降级，无隐藏费用</p>
+  <section class="plans">
+    <div class="plan">
+      <h3>入门版</h3>
+      <div class="price">¥0<small> / 月</small></div>
+      <ul><li>3 个项目</li><li>社区支持</li><li>基础分析</li></ul>
+      <button class="cta">开始使用</button>
+    </div>
+    <div class="plan hot">
+      <span class="tag-hot">最受欢迎</span>
+      <h3>专业版</h3>
+      <div class="price">¥49<small> / 月</small></div>
+      <ul><li>无限项目</li><li>优先支持</li><li>高级分析</li><li>自定义域名</li></ul>
+      <button class="cta">立即升级</button>
+    </div>
+    <div class="plan">
+      <h3>团队版</h3>
+      <div class="price">¥199<small> / 月</small></div>
+      <ul><li>专业版全部功能</li><li>团队协作</li><li>SSO 登录</li><li>SLA 保障</li></ul>
+      <button class="cta">联系销售</button>
+    </div>
+  </section>
+</body>
+</html>` },
+  { name: 'sample-profile.html', html: `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>个人主页</title>
+  <style>
+    body { margin: 0; padding: 2rem; min-height: 100vh; font-family: system-ui, sans-serif;
+           background: linear-gradient(160deg, #fdf2f8, #eff6ff); display: flex; justify-content: center; align-items: flex-start; }
+    .card { width: 340px; background: #fff; border-radius: 20px; overflow: hidden;
+            box-shadow: 0 20px 50px rgba(30,41,59,.12); margin-top: 2rem; }
+    .cover { height: 96px; background: linear-gradient(90deg, #f472b6, #a78bfa, #60a5fa); }
+    .avatar { width: 84px; height: 84px; border-radius: 50%; border: 4px solid #fff; margin: -42px auto 0;
+              display: flex; align-items: center; justify-content: center; font-size: 32px; color: #fff;
+              background: linear-gradient(135deg, #6366f1, #8b5cf6); }
+    .info { text-align: center; padding: 14px 24px 26px; }
+    h2 { margin: 10px 0 2px; font-size: 20px; }
+    .bio { color: #64748b; font-size: 14px; }
+    .stats { display: flex; justify-content: space-around; margin: 20px 0; }
+    .stats b { display: block; font-size: 18px; }
+    .stats span { font-size: 12px; color: #94a3b8; }
+    .follow { width: 100%; padding: 11px; border: none; border-radius: 12px; font-size: 15px; color: #fff; cursor: pointer;
+              background: linear-gradient(90deg, #6366f1, #8b5cf6); }
+    .skills { margin-top: 16px; }
+    .skill { display: inline-block; margin: 3px; padding: 4px 12px; font-size: 12px; border-radius: 999px;
+             background: #f1f5f9; color: #475569; }
+  </style>
+</head>
+<body>
+  <article class="card">
+    <div class="cover"></div>
+    <div class="avatar">林</div>
+    <div class="info">
+      <h2>林小满</h2>
+      <p class="bio">前端工程师 · 喜欢设计与开源</p>
+      <div class="stats">
+        <div><b>128</b><span>作品</span></div>
+        <div><b>4.2k</b><span>关注者</span></div>
+        <div><b>312</b><span>关注中</span></div>
+      </div>
+      <button class="follow">+ 关注</button>
+      <div class="skills">
+        <span class="skill">TypeScript</span><span class="skill">CSS</span>
+        <span class="skill">Node.js</span><span class="skill">Figma</span>
+      </div>
+    </div>
+  </article>
+</body>
+</html>` },
+  { name: 'sample-dashboard.html', html: `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>数据看板</title>
+  <style>
+    body { margin: 0; padding: 2rem; font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; }
+    h1 { font-size: 22px; margin: 0 0 20px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; max-width: 900px; }
+    .stat { background: #1e293b; border: 1px solid #334155; border-radius: 14px; padding: 20px; }
+    .stat .label { font-size: 13px; color: #94a3b8; }
+    .stat .value { font-size: 30px; font-weight: 700; margin: 8px 0 4px; }
+    .up { color: #34d399; font-size: 13px; }
+    .down { color: #f87171; font-size: 13px; }
+    .bar { height: 6px; border-radius: 3px; background: #334155; margin-top: 12px; overflow: hidden; }
+    .bar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #38bdf8, #818cf8); }
+    .panel { grid-column: 1 / -1; background: #1e293b; border: 1px solid #334155; border-radius: 14px; padding: 20px; }
+    .row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #334155; font-size: 14px; }
+    .row:last-child { border: none; }
+    .pill { padding: 2px 10px; border-radius: 999px; font-size: 12px; background: rgba(52,211,153,.15); color: #34d399; }
+  </style>
+</head>
+<body>
+  <h1>运营概览 <span style="font-size:13px;color:#64748b;font-weight:400">最近 30 天</span></h1>
+  <section class="grid">
+    <div class="stat">
+      <div class="label">活跃用户</div>
+      <div class="value">24,831</div>
+      <span class="up">▲ 12.4%</span>
+      <div class="bar"><i style="width:78%"></i></div>
+    </div>
+    <div class="stat">
+      <div class="label">转化率</div>
+      <div class="value">3.62%</div>
+      <span class="up">▲ 0.8%</span>
+      <div class="bar"><i style="width:36%"></i></div>
+    </div>
+    <div class="stat">
+      <div class="label">平均会话时长</div>
+      <div class="value">4m 32s</div>
+      <span class="down">▼ 2.1%</span>
+      <div class="bar"><i style="width:52%"></i></div>
+    </div>
+    <div class="panel">
+      <div class="label" style="margin-bottom:8px">最新订单</div>
+      <div class="row"><span>#A-1024 · 杭州</span><span class="pill">已发货</span></div>
+      <div class="row"><span>#A-1023 · 上海</span><span class="pill">已发货</span></div>
+      <div class="row"><span>#A-1022 · 北京</span><span class="pill">已完成</span></div>
+    </div>
+  </section>
+</body>
+</html>` },
+  { name: 'sample-login.html', html: `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>登录</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 2rem; min-height: 100vh; font-family: system-ui, sans-serif;
+           background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; }
+    .box { width: 360px; background: rgba(255,255,255,.95); border-radius: 18px; padding: 36px 32px;
+           box-shadow: 0 24px 60px rgba(0,0,0,.25); }
+    .logo { width: 48px; height: 48px; border-radius: 12px; margin: 0 auto 14px;
+            background: linear-gradient(135deg, #667eea, #764ba2); color: #fff;
+            display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; }
+    h2 { text-align: center; margin: 0 0 4px; font-size: 20px; }
+    .hint { text-align: center; color: #94a3b8; font-size: 13px; margin-bottom: 24px; }
+    label { font-size: 13px; font-weight: 600; color: #475569; display: block; margin: 14px 0 6px; }
+    input { width: 100%; padding: 11px 14px; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 14px; outline: none; }
+    input:focus { border-color: #818cf8; box-shadow: 0 0 0 3px rgba(129,140,248,.2); }
+    .opts { display: flex; justify-content: space-between; align-items: center; font-size: 13px; margin: 14px 0 20px; color: #64748b; }
+    .opts a { color: #6366f1; text-decoration: none; }
+    .submit { width: 100%; padding: 12px; border: none; border-radius: 10px; font-size: 15px; color: #fff; cursor: pointer;
+              background: linear-gradient(90deg, #667eea, #764ba2); }
+    .signup { text-align: center; font-size: 13px; color: #94a3b8; margin-top: 18px; }
+    .signup a { color: #6366f1; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <form class="box">
+    <div class="logo">N</div>
+    <h2>欢迎回来</h2>
+    <p class="hint">登录你的 Nebula 账号</p>
+    <label for="email">邮箱</label>
+    <input id="email" type="email" placeholder="you@example.com">
+    <label for="pwd">密码</label>
+    <input id="pwd" type="password" placeholder="••••••••">
+    <div class="opts">
+      <span><input type="checkbox" id="remember" style="width:auto"> 记住我</span>
+      <a href="#reset">忘记密码？</a>
+    </div>
+    <button class="submit" type="submit">登 录</button>
+    <p class="signup">还没有账号？<a href="#signup">立即注册</a></p>
+  </form>
+</body>
+</html>` },
+];
+let lastSampleIdx = -1;
+
+$('#sampleBtn').addEventListener('click', () => {
+  let idx;
+  do { idx = Math.floor(Math.random() * SAMPLES.length); } while (SAMPLES.length > 1 && idx === lastSampleIdx);
+  lastSampleIdx = idx;
+  const s = SAMPLES[idx];
+  loadHtml(s.html, s.name);
+  showToast('已加载示例：' + s.name);
 });
 
 document.querySelectorAll('#levelSeg button').forEach(b => {
